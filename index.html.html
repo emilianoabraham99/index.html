@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Textura de Suelo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f9f6f0;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 500px;
+            width: 100%;
+            background: #ffffff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            box-sizing: border-box;
+        }
+        h2 {
+            color: #5c4033;
+            margin-top: 0;
+            text-align: center;
+            font-size: 1.5rem;
+        }
+        .canvas-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        canvas {
+            background: #fdfcf7;
+            border: 1px solid #e0dacf;
+            border-radius: 8px;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        .slider-group {
+            margin-bottom: 15px;
+        }
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+        .slider-group.arena .slider-label { color: #c48b45; }
+        .slider-group.limo .slider-label { color: #8a9a86; }
+        .slider-group.arcilla .slider-label { color: #b05a46; }
+        
+        input[type=range] {
+            width: 100%;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #5c4033;
+            cursor: pointer;
+        }
+        .result-box {
+            background: #f0f4f1;
+            border-left: 5px solid #4a6b52;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .result-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #2c3e2f;
+            margin-bottom: 5px;
+        }
+        .result-desc {
+            font-size: 0.9rem;
+            color: #555;
+        }
+        .btn-reset {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background: #5c4033;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background 0.2s;
+        }
+        .btn-reset:hover {
+            background: #463026;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Explorador de Texturas de Suelo</h2>
+    
+    <div class="canvas-container">
+        <canvas id="triangleCanvas" width="300" height="260"></canvas>
+    </div>
+
+    <div class="controls">
+        <div class="slider-group arena">
+            <div class="slider-label"><span>Arena</span> <span id="valArena">40%</span></div>
+            <input type="range" id="slideArena" min="0" max="100" value="40">
+        </div>
+        <div class="slider-group limo">
+            <div class="slider-label"><span>Limo</span> <span id="valLimo">40%</span></div>
+            <input type="range" id="slideLimo" min="0" max="100" value="40">
+        </div>
+        <div class="slider-group arcilla">
+            <div class="slider-label"><span>Arcilla</span> <span id="valArcilla">20%</span></div>
+            <input type="range" id="slideArcilla" min="0" max="100" value="20">
+        </div>
+    </div>
+
+    <div class="result-box">
+        <div class="result-title" id="soilType">Suelo Franco (Loam)</div>
+        <div class="result-desc" id="soilDesc">El suelo ideal. Equilibrio perfecto para retener humedad y permitir la oxigenación de las raíces.</div>
+    </div>
+
+    <button class="btn-reset" id="btnReset">Restablecer a Franco (Loam)</button>
+</div>
+
+<script>
+    const sArena = document.getElementById('slideArena');
+    const sLimo = document.getElementById('slideLimo');
+    const sArcilla = document.getElementById('slideArcilla');
+    
+    const txtArena = document.getElementById('valArena');
+    const txtLimo = document.getElementById('valLimo');
+    const txtArcilla = document.getElementById('valArcilla');
+    
+    const soilType = document.getElementById('soilType');
+    const soilDesc = document.getElementById('soilDesc');
+    const canvas = document.getElementById('triangleCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Coordenadas del triángulo equilátero en el Canvas
+    const p1 = { x: 150, y: 20 };  // Vértice superior (100% Arcilla)
+    const p2 = { x: 30, y: 230 };  // Vértice inferior izquierdo (100% Arena)
+    const p3 = { x: 270, y: 230 }; // Vértice inferior derecho (100% Limo)
+
+    function updateSliders(changed) {
+        let arena = parseInt(sArena.value);
+        let limo = parseInt(sLimo.value);
+        let arcilla = parseInt(sArcilla.value);
+
+        // Algoritmo matemático para bloquear la suma en 100%
+        if (changed === 'arena') {
+            let rem = 100 - arena;
+            let currentTotal = limo + arcilla;
+            if (currentTotal === 0) { limo = rem / 2; arcilla = rem / 2; }
+            else {
+                limo = Math.round((limo / currentTotal) * rem);
+                arcilla = 100 - arena - limo;
+            }
+        } else if (changed === 'limo') {
+            let rem = 100 - limo;
+            let currentTotal = arena + arcilla;
+            if (currentTotal === 0) { arena = rem / 2; arcilla = rem / 2; }
+            else {
+                arena = Math.round((arena / currentTotal) * rem);
+                arcilla = 100 - limo - arena;
+            }
+        } else if (changed === 'arcilla') {
+            let rem = 100 - arcilla;
+            let currentTotal = arena + limo;
+            if (currentTotal === 0) { arena = rem / 2; limo = rem / 2; }
+            else {
+                arena = Math.round((arena / currentTotal) * rem);
+                limo = 100 - arcilla - arena;
+            }
+        }
+
+        // Forzar límites correctos
+        if(arena < 0) arena = 0; if(limo < 0) limo = 0; if(arcilla < 0) arcilla = 0;
+
+        sArena.value = arena;
+        sLimo.value = limo;
+        sArcilla.value = arcilla;
+
+        txtArena.innerText = arena + '%';
+        txtLimo.innerText = limo + '%';
+        txtArcilla.innerText = arcilla + '%';
+
+        evaluarSuelo(arena, limo, arcilla);
+        drawTriangle(arena, limo, arcilla);
+    }
+
+    function evaluarSuelo(sand, silt, clay) {
+        if (clay >= 40) {
+            soilType.innerText = "Suelo Arcilloso";
+            soilDesc.innerText = "Alta retención de agua y nutrientes, pero baja aireación. Tiende a inundarse y es difícil de cultivar cuando se seca.";
+        } else if (sand >= 85) {
+            soilType.innerText = "Suelo Arenoso";
+            soilDesc.innerText = "Excelente drenaje y aireación, pero no retiene nutrientes ni agua. Las plantas requieren riego constante.";
+        } else if (silt >= 80) {
+            soilType.innerText = "Suelo Limoso";
+            soilDesc.innerText = "Retiene bien el agua y es fértil, pero es muy propenso a compactarse formando costras duras en la superficie.";
+        } else if (sand >= 30 && sand <= 50 && silt >= 30 && silt <= 50 && clay >= 10 && clay <= 25) {
+            soilType.innerText = "Suelo Franco (Loam)";
+            soilDesc.innerText = "¡El suelo ideal! Equilibrio perfecto para retener humedad y permitir la oxigenación de las raíces.";
+        } else if (clay >= 20 && clay <= 35 && sand > 45) {
+            soilType.innerText = "Suelo Franco-Arcillo-Arenoso";
+            soilDesc.innerText = "Buena combinación. La arena compensa la dureza de la arcilla permitiendo un desarrollo correcto de raíces.";
+        } else {
+            soilType.innerText = "Mezcla Franca Mixta";
+            soilDesc.innerText = "Suelo de propiedades moderadas. Combina texturas sin un dominio extremo de ninguno de sus componentes.";
+        }
+    }
+
+    function drawTriangle(sand, silt, clay) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Dibujar el triángulo base
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.closePath();
+        ctx.strokeStyle = '#a69b89';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Etiquetas de los vértices
+        ctx.fillStyle = '#b05a46'; ctx.fillText('Arcilla (100%)', p1.x - 35, p1.y - 5);
+        ctx.fillStyle = '#c48b45'; ctx.fillText('Arena', p2.x - 25, p2.y + 15);
+        ctx.fillStyle = '#8a9a86'; ctx.fillText('Limo', p3.x + 5, p3.y + 15);
+
+        // Calcular posición del punto usando coordenadas baricéntricas basadas en porcentajes
+        const wClay = clay / 100;
+        const wSand = sand / 100;
+        const wSilt = silt / 100;
+
+        const dotX = wClay * p1.x + wSand * p2.x + wSilt * p3.x;
+        const dotY = wClay * p1.y + wSand * p2.y + wSilt * p3.y;
+
+        // Dibujar el indicador de la muestra
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 7, 0, 2 * Math.PI);
+        ctx.fillStyle = '#5c4033';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    sArena.addEventListener('input', () => updateSliders('arena'));
+    sLimo.addEventListener('input', () => updateSliders('limo'));
+    sArcilla.addEventListener('input', () => updateSliders('arcilla'));
+    
+    document.getElementById('btnReset').addEventListener('click', () => {
+        sArena.value = 40; sLimo.value = 40; sArcilla.value = 20;
+        updateSliders('arena');
+    });
+
+    // Carga inicial
+    updateSliders('arena');
+</script>
+</body>
+</html>
